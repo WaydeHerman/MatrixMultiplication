@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Column Chart Viz</title>
+    <style>
+      body {
+        text-align: center;
+      }
+
+      .chart {
+        padding-top: 50px;
+        margin: auto;
+      }
+      .viz-container {
+        border: 2px solid black;
+        display: inline-block;
+        height: 500px;
+        width: 420px;
+        margin: 10px;
+      }
+
+      .controls-container {
+        height: 100px;
+      }
+
+      .slider {
+        -webkit-appearance: none;
+        display: inline-block;
+        width: 24px;
+        height: 6px;
+        border-radius: 2px;
+        background: #d3d3d3;
+        margin: 0 auto;
+        outline: none;
+        opacity: 0.8;
+        -webkit-transition: 0.2s;
+        transition: opacity 0.2s;
+      }
+
+      /* Mouse-over effects */
+      .slider:hover {
+        opacity: 1;
+        /* Fully shown on mouse-over */
+      }
+
+      .slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 8px;
+        height: 16px;
+        border-radius: 35%;
+        background: #54494b;
+        cursor: pointer;
+      }
+
+      .slider::-moz-range-thumb {
+        width: 8px;
+        height: 16px;
+        border-radius: 35%;
+        background: #54494b;
+        cursor: pointer;
+      }
+
+      .slider {
+        stroke: #d3d3d3;
+      }
+
+      .track-inset {
+        stroke: #d3d3d3;
+        stroke-width: 8px;
+      }
+
+      .track-overlay {
+        pointer-events: stroke;
+        stroke-width: 20px;
+        stroke: transparent;
+        cursor: pointer;
+      }
+
+      .handle {
+        fill: #54494b;
+        stroke: #000;
+        stroke-opacity: 0.5;
+        stroke-width: 0px;
+      }
+
+      .slider-labels {
+        text-anchor: middle;
+        font-family: "arial";
+        font-size: 12px;
+        font-weight: bold;
+        fill: #54494b;
+      }
+
+      .matrix-node {
+        stroke: white;
+        stroke-width: 2px;
+      }
+
+      .memory-node {
+        stroke: white;
+        stroke-width: 2px;
+      }
+
+      .play-pause-btn {
+        fill: #bab9b9;
+        cursor: pointer;
+      }
+
+      .play-pause-text {
+        fill: white;
+        font-weight: bold;
+        text-anchor: middle;
+        font-family: "arial";
+        cursor: pointer;
+      }
+    </style>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+  </head>
+
+  <body>
+    <div class="chart">
+      <div id="matrix-view" class="viz-container"></div>
+      <div id="memory-view" class="viz-container"></div>
+      <div id="graph-view" class="viz-container"></div>
+      <div class="controls-container"></div>
+    </div>
+
+    <script>
+      // Global Variables:
+      var widthChart = 410;
+      var heightChart = 500;
+      var sliderMargin = { left: 100, right: 50 };
+      var minMatrixN = 1;
+      var maxMatrixN = 10;
+      var playMode = 0;
+
+      // Sliders;
+      var currentN = 1;
+      var currentM = 1;
+      var currentP = 1;
+      var n = currentM * currentP;
+
+      var chartA = d3
+        .select("#matrix-view")
+        .append("svg")
+        .attr("width", widthChart)
+        .attr("height", heightChart)
+        .append("g")
+        .attr("transform", "translate(0,0)");
+
+      var chartB = d3
+        .select("#memory-view")
+        .append("svg")
+        .attr("width", widthChart)
+        .attr("height", heightChart)
+        .append("g")
+        .attr("transform", "translate(0,0)");
+
+      var chartC = d3
+        .select("#graph-view")
+        .append("svg")
+        .attr("width", widthChart)
+        .attr("height", heightChart)
+        .append("g")
+        .attr("transform", "translate(0,0)");
+
+      var sliderX = d3
+        .scaleLinear()
+        .domain([minMatrixN, maxMatrixN])
+        .range([sliderMargin.left, widthChart - sliderMargin.right])
+        .clamp(true);
+
+      var sliderNSVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + 0 + "," + 30 + ")");
+
+      sliderNSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.3em")
+        .text("n: ")
+        .attr("x", 60);
+
+      var nLabel = sliderNSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.3em")
+        .text(currentN)
+        .attr("x", 80);
+
+      var sliderN = sliderNSVG.append("g").attr("class", "slider");
+
+      sliderN
+        .append("line")
+        .attr("class", "track")
+        .attr("x1", sliderX.range()[0])
+        .attr("x2", sliderX.range()[1])
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-inset")
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-overlay")
+        .call(
+          d3
+            .drag()
+            .on("start.interrupt", function() {
+              sliderN.interrupt();
+            })
+            .on("start drag", function() {
+              currentN = Math.round(sliderX.invert(d3.event.x));
+              handleN.attr("x", function() {
+                return sliderX(currentN);
+              });
+              nLabel.text(currentN);
+              console.log("currentN", currentN);
+              updateBoxes();
+              updateBoxes();
+              reset();
+            })
+        );
+
+      var handleN = sliderN
+        .insert("rect", ".track-overlay")
+        .attr("class", "handle")
+        .attr("y", "-10")
+        .attr("x", sliderX(currentN))
+        .attr("width", "16px")
+        .attr("height", "20px");
+
+      var sliderMSVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + 0 + "," + 70 + ")");
+
+      sliderMSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.3em")
+        .text("m: ")
+        .attr("x", 60);
+
+      var mLabel = sliderMSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.3em")
+        .text(currentM)
+        .attr("x", 80);
+
+      var sliderM = sliderMSVG.append("g").attr("class", "slider");
+
+      sliderM
+        .append("line")
+        .attr("class", "track")
+        .attr("x1", sliderX.range()[0])
+        .attr("x2", sliderX.range()[1])
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-inset")
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-overlay")
+        .call(
+          d3
+            .drag()
+            .on("start.interrupt", function() {
+              sliderM.interrupt();
+            })
+            .on("start drag", function() {
+              currentM = Math.round(sliderX.invert(d3.event.x));
+              handleM.attr("x", function() {
+                return sliderX(currentM);
+              });
+              mLabel.text(currentM);
+              console.log("currentM", currentM);
+              updateBoxes();
+              updateBoxes();
+              reset();
+            })
+        );
+
+      var handleM = sliderM
+        .insert("rect", ".track-overlay")
+        .attr("class", "handle")
+        .attr("y", "-10")
+        .attr("x", sliderX(currentM))
+        .attr("width", "16px")
+        .attr("height", "20px");
+
+      var sliderPSVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + 0 + "," + 110 + ")");
+
+      sliderPSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.3em")
+        .text("p: ")
+        .attr("x", 60);
+
+      var pLabel = sliderPSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.3em")
+        .text(currentP)
+        .attr("x", 80);
+
+      var sliderP = sliderPSVG.append("g").attr("class", "slider");
+
+      sliderP
+        .append("line")
+        .attr("class", "track")
+        .attr("x1", sliderX.range()[0])
+        .attr("x2", sliderX.range()[1])
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-inset")
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-overlay")
+        .call(
+          d3
+            .drag()
+            .on("start.interrupt", function() {
+              sliderP.interrupt();
+            })
+            .on("start drag", function() {
+              currentP = Math.round(sliderX.invert(d3.event.x));
+              handleP.attr("x", function() {
+                return sliderX(currentP);
+              });
+              pLabel.text(currentP);
+              console.log("currentP", currentP);
+              updateBoxes();
+              updateBoxes();
+              reset();
+            })
+        );
+
+      var handleP = sliderP
+        .insert("rect", ".track-overlay")
+        .attr("class", "handle")
+        .attr("y", "-10")
+        .attr("x", sliderX(currentP))
+        .attr("width", "16px")
+        .attr("height", "20px");
+
+      // setup matrix view boxes:
+      var boxWidth = 120;
+      var boxHeight = 340;
+      var boxASVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + 10 + "," + 150 + ")");
+
+      /* boxASVG
+        .append("rect")
+        .attr("width", boxWidth)
+        .attr("height", boxHeight)
+        .attr("fill", "none")
+        .style("stroke", "black")
+        .style("stroke-width", "2px"); */
+
+      var boxBSVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + (boxWidth + 25) + "," + 150 + ")");
+
+      /* boxBSVG
+        .append("rect")
+        .attr("width", boxWidth)
+        .attr("height", boxHeight)
+        .attr("fill", "none")
+        .style("stroke", "black")
+        .style("stroke-width", "2px"); */
+
+      var boxCSVG = chartA
+        .append("g")
+        .attr(
+          "transform",
+          "translate(" + (2 * boxWidth + 40) + "," + 150 + ")"
+        );
+
+      /* boxCSVG
+        .append("rect")
+        .attr("width", boxWidth)
+        .attr("height", boxHeight)
+        .attr("fill", "none")
+        .style("stroke", "black")
+        .style("stroke-width", "2px"); */
+
+      var dataA = getMatrix(currentM, currentN);
+      var dataB = getMatrix(currentP, currentM);
+      var dataC = getMatrix(currentP, currentN);
+
+      console.log(dataA);
+      console.log(dataB);
+      console.log(dataC);
+
+      //activateMatrix(currentM, currentN, dataA);
+      //activateMatrix(currentN, currentP, dataB);
+      //activateMatrix(currentM, currentP, dataC);
+
+      xScaleM = d3
+        .scaleBand()
+        .domain([...Array(currentM).keys()])
+        .range([0, boxWidth]);
+
+      xScaleP = d3
+        .scaleBand()
+        .domain([...Array(currentP).keys()])
+        .range([0, boxWidth]);
+
+      yScaleN = d3
+        .scaleBand()
+        .domain([...Array(currentN).keys()])
+        .range([0, boxHeight]);
+
+      yScaleM = d3
+        .scaleBand()
+        .domain([...Array(currentM).keys()])
+        .range([0, boxHeight]);
+
+      var boxesA = boxASVG
+        .selectAll(".matrix-g")
+        .data(dataA)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleN(d.key) + ")";
+        })
+        .selectAll(".matrix-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      boxesA
+        .enter()
+        .append("rect")
+        .attr("class", "matrix-node")
+        .attr("fill", "#bab9b9")
+        .attr("x", function(d) {
+          return xScaleM(d.key);
+        })
+        .attr("height", function(d) {
+          return yScaleN.bandwidth();
+        })
+        .attr("width", function(d) {
+          return xScaleM.bandwidth();
+        });
+
+      var boxesB = boxBSVG
+        .selectAll(".matrix-g")
+        .data(dataB)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleM(d.key) + ")";
+        })
+        .selectAll(".matrix-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      boxesB
+        .enter()
+        .append("rect")
+        .attr("class", "matrix-node")
+        .attr("fill", "#bab9b9")
+        .attr("x", function(d) {
+          return xScaleP(d.key);
+        })
+        .attr("height", function(d) {
+          return yScaleM.bandwidth();
+        })
+        .attr("width", function(d) {
+          return xScaleP.bandwidth();
+        });
+
+      var boxesC = boxCSVG
+        .selectAll(".matrix-g")
+        .data(dataC)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleN(d.key) + ")";
+        })
+        .selectAll(".matrix-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      boxesC
+        .enter()
+        .append("rect")
+        .attr("class", "matrix-node")
+        .attr("fill", "#bab9b9")
+        .attr("x", function(d) {
+          return xScaleP(d.key);
+        })
+        .attr("height", function(d) {
+          return yScaleN.bandwidth();
+        })
+        .attr("width", function(d) {
+          return xScaleP.bandwidth();
+        });
+
+      // Memory View:
+      var memoryX = 20;
+      var memoryY = 5;
+      var memoryA = getMatrix(memoryX, memoryY);
+      var memoryB = getMatrix(memoryX, memoryY);
+      var memoryC = getMatrix(memoryX, memoryY);
+      var memoryWidth = widthChart - 20;
+      var memoryHeight = 100;
+
+      var xScaleMemory = d3
+        .scaleBand()
+        .domain([...Array(memoryX).keys()])
+        .range([0, memoryWidth]);
+
+      var yScaleMemory = d3
+        .scaleBand()
+        .domain([...Array(memoryY).keys()])
+        .range([0, memoryHeight]);
+
+      var memoryASVG = chartB
+        .append("g")
+        .attr("transform", "translate(" + 10 + "," + 150 + ")");
+
+      var memoryBSVG = chartB
+        .append("g")
+        .attr("transform", "translate(" + 10 + "," + 267.5 + ")");
+
+      var memoryCSVG = chartB
+        .append("g")
+        .attr("transform", "translate(" + 10 + "," + 385 + ")");
+
+      var memoryAchart = memoryASVG
+        .selectAll(".memory-a-g")
+        .data(memoryA)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-a-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleMemory(d.key) + ")";
+        })
+        .selectAll(".memory-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      memoryAchart
+        .enter()
+        .append("rect")
+        .attr("class", "memory-node")
+        .attr("fill", "#bab9b9")
+        .attr("x", function(d) {
+          return xScaleMemory(d.key);
+        })
+        .attr("height", function(d) {
+          return yScaleMemory.bandwidth();
+        })
+        .attr("width", function(d) {
+          return xScaleMemory.bandwidth();
+        });
+
+      var memoryBchart = memoryBSVG
+        .selectAll(".memory-b-g")
+        .data(memoryB)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-b-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleMemory(d.key) + ")";
+        })
+        .selectAll(".memory-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      memoryBchart
+        .enter()
+        .append("rect")
+        .attr("class", "memory-node")
+        .attr("fill", "#bab9b9")
+        .attr("x", function(d) {
+          return xScaleMemory(d.key);
+        })
+        .attr("height", function(d) {
+          return yScaleMemory.bandwidth();
+        })
+        .attr("width", function(d) {
+          return xScaleMemory.bandwidth();
+        });
+
+      var memoryCchart = memoryCSVG
+        .selectAll(".memory-c-g")
+        .data(memoryC)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-c-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleMemory(d.key) + ")";
+        })
+        .selectAll(".memory-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      memoryCchart
+        .enter()
+        .append("rect")
+        .attr("class", "memory-node")
+        .attr("fill", "#bab9b9")
+        .attr("x", function(d) {
+          return xScaleMemory(d.key);
+        })
+        .attr("height", function(d) {
+          return yScaleMemory.bandwidth();
+        })
+        .attr("width", function(d) {
+          return xScaleMemory.bandwidth();
+        });
+
+      // Graph View:
+
+      // Controls:
+      var controlSVG = d3
+        .select(".controls-container")
+        .append("svg")
+        .attr("width", 200)
+        .attr("height", 100)
+        .append("g")
+        .attr("transform", "translate(0,0)")
+        .on("mouseover", function() {
+          d3.select(".play-pause-btn").style("fill", "black");
+        })
+        .on("mouseout", function() {
+          d3.select(".play-pause-btn").style("fill", "#bab9b9");
+        });
+
+      controlSVG
+        .append("rect")
+        .attr("class", "play-pause-btn")
+        .attr("y", 20)
+        .attr("x", 50)
+        .attr("width", 100)
+        .attr("height", 50)
+        .on("click", function() {
+          console.log("n", n);
+          if (playMode === 0) {
+            playMode = 1;
+            currentStep = 0;
+            d3.select(".play-pause-text").text("Pause");
+            timer = setInterval(function() {
+              if (currentStep < n) {
+                console.log(currentStep);
+                step();
+                currentStep += 1;
+              } else {
+                clearInterval(timer);
+                playMode = 0;
+                d3.select(".play-pause-text").text("Play");
+              }
+            }, 1000);
+          } else {
+            clearInterval(timer);
+            playMode = 0;
+            d3.select(".play-pause-text").text("Play");
+          }
+        });
+
+      controlSVG
+        .append("text")
+        .attr("class", "play-pause-text")
+        .text("play")
+        .attr("y", 50)
+        .attr("x", 100);
+
+      function reset() {
+        boxASVG.selectAll(".matrix-node").attr("fill", "#bab9b9");
+        boxBSVG.selectAll(".matrix-node").attr("fill", "#bab9b9");
+        boxCSVG.selectAll(".matrix-node").attr("fill", "#bab9b9");
+        memoryASVG.selectAll(".memory-node").attr("fill", "#bab9b9");
+        memoryBSVG.selectAll(".memory-node").attr("fill", "#bab9b9");
+        memoryCSVG.selectAll(".memory-node").attr("fill", "#bab9b9");
+      }
+
+      function step() {
+        console.log("currentP", currentP);
+        console.log("currentN", currentN);
+        var index = 0;
+        loop0: for (let i = 0; i < currentN; i++) {
+          loop1: for (let j = 0; j < currentP; j++) {
+            if (index === currentStep) {
+              var x = i;
+              var y = j;
+              break loop0;
+            }
+            index++;
+          }
+        }
+        console.log("x", x);
+        console.log("y", y);
+
+        y_next = currentStep;
+        if (y_next + 1 > currentP) {
+          y_next = currentP - 1;
+        }
+
+        activateMatrix("", x, dataA);
+        activateMatrix(y, "", dataB);
+        activateMatrix(y, x, dataC);
+        activateMatrix("", "", memoryA, (x + 1) * currentM);
+        activateMatrix("", "", memoryB, (y_next + 1) * currentM);
+        activateMatrix("", "", memoryC, currentStep + 1);
+        update_charts();
+      }
+
+      function update_charts() {
+        boxASVG.selectAll(".matrix-node").attr("fill", function(d) {
+          if (d.active === true) {
+            return "#235789";
+          } else {
+            return "#bab9b9";
+          }
+        });
+        boxBSVG.selectAll(".matrix-node").attr("fill", function(d) {
+          if (d.active === true) {
+            return "#F1D302";
+          } else {
+            return "#bab9b9";
+          }
+        });
+        boxCSVG.selectAll(".matrix-node").attr("fill", function(d) {
+          if (d.active === true) {
+            return "#C1292E";
+          } else {
+            return "#bab9b9";
+          }
+        });
+        memoryASVG.selectAll(".memory-node").attr("fill", function(d) {
+          if (d.active === true) {
+            return "#235789";
+          } else {
+            return "#bab9b9";
+          }
+        });
+        memoryBSVG.selectAll(".memory-node").attr("fill", function(d) {
+          if (d.active === true) {
+            return "#F1D302";
+          } else {
+            return "#bab9b9";
+          }
+        });
+        memoryCSVG.selectAll(".memory-node").attr("fill", function(d) {
+          if (d.active === true) {
+            return "#C1292E";
+          } else {
+            return "#bab9b9";
+          }
+        });
+      }
+
+      function updateBoxes() {
+        n = currentN * currentP;
+
+        dataA = getMatrix(currentM, currentN);
+        dataB = getMatrix(currentP, currentM);
+        dataC = getMatrix(currentP, currentN);
+
+        xScaleM = d3
+          .scaleBand()
+          .domain([...Array(currentM).keys()])
+          .range([0, boxWidth]);
+
+        xScaleP = d3
+          .scaleBand()
+          .domain([...Array(currentP).keys()])
+          .range([0, boxWidth]);
+
+        yScaleN = d3
+          .scaleBand()
+          .domain([...Array(currentN).keys()])
+          .range([0, boxHeight]);
+
+        yScaleM = d3
+          .scaleBand()
+          .domain([...Array(currentM).keys()])
+          .range([0, boxHeight]);
+
+        var gAUpdate = boxASVG.selectAll(".matrix-g").data(dataA);
+        //
+        var gBUpdate = boxBSVG.selectAll(".matrix-g").data(dataB);
+        var gCUpdate = boxCSVG.selectAll(".matrix-g").data(dataC);
+
+        gAUpdate.exit().remove();
+        //
+        gBUpdate.exit().remove();
+        gCUpdate.exit().remove();
+
+        gAUpdate
+          .enter()
+          .append("g")
+          .attr("class", "matrix-g");
+        //
+        gBUpdate
+          .enter()
+          .append("g")
+          .attr("class", "matrix-g");
+        gCUpdate
+          .enter()
+          .append("g")
+          .attr("class", "matrix-g");
+
+        var boxAUpdate = gAUpdate.selectAll(".matrix-node").data(function(d) {
+          return d.values;
+        });
+        //
+        var boxBUpdate = gBUpdate.selectAll(".matrix-node").data(function(d) {
+          return d.values;
+        });
+        var boxCUpdate = gCUpdate.selectAll(".matrix-node").data(function(d) {
+          return d.values;
+        });
+
+        boxAUpdate.exit().remove();
+        //
+        boxBUpdate.exit().remove();
+        boxCUpdate.exit().remove();
+
+        boxAUpdate
+          .enter()
+          .append("rect")
+          .attr("class", "matrix-node");
+        //
+        boxBUpdate
+          .enter()
+          .append("rect")
+          .attr("class", "matrix-node");
+        boxCUpdate
+          .enter()
+          .append("rect")
+          .attr("class", "matrix-node");
+
+        boxASVG.selectAll(".matrix-g").attr("transform", function(d) {
+          return "translate(0," + yScaleN(d.key) + ")";
+        });
+        //
+        boxBSVG.selectAll(".matrix-g").attr("transform", function(d) {
+          return "translate(0," + yScaleM(d.key) + ")";
+        });
+        boxCSVG.selectAll(".matrix-g").attr("transform", function(d) {
+          return "translate(0," + yScaleN(d.key) + ")";
+        });
+
+        boxASVG
+          .selectAll(".matrix-node")
+          .attr("x", function(d) {
+            return xScaleM(d.key);
+          })
+          .attr("height", function(d) {
+            return yScaleN.bandwidth();
+          })
+          .attr("width", function(d) {
+            return xScaleM.bandwidth();
+          });
+        //
+        boxBSVG
+          .selectAll(".matrix-node")
+          .attr("x", function(d) {
+            return xScaleP(d.key);
+          })
+          .attr("height", function(d) {
+            return yScaleM.bandwidth();
+          })
+          .attr("width", function(d) {
+            return xScaleP.bandwidth();
+          });
+        boxCSVG
+          .selectAll(".matrix-node")
+          .attr("x", function(d) {
+            return xScaleP(d.key);
+          })
+          .attr("height", function(d) {
+            return yScaleN.bandwidth();
+          })
+          .attr("width", function(d) {
+            return xScaleP.bandwidth();
+          });
+      }
+
+      function activateMatrix(x, y, matrix, next = 0) {
+        /*
+        Takes a matrix and activates nodes.
+        Can be a x, y pair or a row or a column
+        */
+        if (next === 0) {
+          matrix.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.active = false;
+
+              if (
+                (j === x && i === y) ||
+                (j === x && y === "") ||
+                (i === y && x === "")
+              ) {
+                w.active = true;
+              }
+            });
+          });
+        } else {
+          var added = 0;
+          matrix.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              if (added < next) {
+                w.active = true;
+                added += 1;
+              } else {
+                w.active = false;
+              }
+            });
+          });
+        }
+
+        return matrix;
+      }
+
+      function getMatrix(m, n) {
+        // create a nested array based on given dimensions, m x n.
+        result = [];
+        var mArray = [...Array(n).keys()];
+        var nArray = [...Array(m).keys()];
+        mArray.forEach(function(v) {
+          var obj = { key: v, values: [] };
+          nArray.forEach(function(w) {
+            obj.values.push({ key: w, active: false });
+          });
+          result.push(obj);
+        });
+        return result;
+      }
+    </script>
+  </body>
+</html>
