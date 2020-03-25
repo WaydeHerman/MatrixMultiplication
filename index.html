@@ -13,10 +13,10 @@
         margin: auto;
       }
       .viz-container {
-        border: 2px solid black;
+        border: 4px solid black;
         display: inline-block;
-        height: 500px;
-        width: 420px;
+        height: 620px;
+        width: 620px;
         margin: 10px;
       }
 
@@ -94,13 +94,13 @@
       }
 
       .matrix-node {
-        stroke: white;
+        stroke: black;
         stroke-width: 2px;
       }
 
       .memory-node {
-        stroke: white;
-        stroke-width: 2px;
+        stroke: black;
+        stroke-width: 0.5px;
       }
 
       .play-pause-btn {
@@ -115,51 +115,95 @@
         font-family: "arial";
         cursor: pointer;
       }
+      .mode-toggle-text-0,
+      .mode-toggle-text-1 {
+        font-weight: bold;
+        font-family: "arial";
+        cursor: pointer;
+      }
+
+      .line {
+        fill: none;
+        stroke-width: 3px;
+      }
+
+      .tooltip {
+        position: fixed;
+        z-index: 999;
+        left: 0;
+        top: 0;
+        padding: 0.25em 0.5em;
+        border-width: 2px;
+        border-style: solid;
+        background: rgba(255, 255, 255, 1);
+        pointer-events: none;
+        display: none;
+        font-family: arial;
+        text-align: start;
+        font-size: 0.8em;
+      }
+
+      .tooltip-title {
+        font-weight: bold;
+      }
+
+      .tick > line {
+        display: none;
+      }
+
+      .domain {
+        display: none;
+      }
+
+      .axis-label {
+        font-size: 0.8em;
+        font-weight: bold;
+        text-anchor: middle;
+        font-family: arial;
+      }
+
+      .legend-label {
+        font-family: arial;
+        font-size: 0.8em;
+        font-weight: bold;
+      }
     </style>
     <script src="https://d3js.org/d3.v5.min.js"></script>
   </head>
 
   <body>
+    <div class="tooltip">
+      <div class="tooltip-title"></div>
+      <div class="naive-info"></div>
+      <div class="transpose-info"></div>
+      <div class="tiled-info"></div>
+    </div>
     <div class="chart">
       <div id="matrix-view" class="viz-container"></div>
-      <div id="memory-view" class="viz-container"></div>
       <div id="graph-view" class="viz-container"></div>
       <div class="controls-container"></div>
     </div>
 
     <script>
       // Global Variables:
-      var widthChart = 410;
-      var heightChart = 500;
-      var sliderMargin = { left: 100, right: 50 };
+      var widthChart = 620;
+      var heightChart = 620;
+      var sliderMargin = { left: 260, right: 30 };
+      var graphMargin = { top: 140, right: 80, bottom: 160, left: 80 };
       var minMatrixN = 1;
       var maxMatrixN = 10;
       var playMode = 0;
+      var mode = "naive";
+      var xScale, graphData;
 
       // Sliders;
       var currentN = 1;
       var currentM = 1;
       var currentP = 1;
-      var n = currentM * currentP;
+      var n = currentM * currentM * currentP;
 
       var chartA = d3
         .select("#matrix-view")
-        .append("svg")
-        .attr("width", widthChart)
-        .attr("height", heightChart)
-        .append("g")
-        .attr("transform", "translate(0,0)");
-
-      var chartB = d3
-        .select("#memory-view")
-        .append("svg")
-        .attr("width", widthChart)
-        .attr("height", heightChart)
-        .append("g")
-        .attr("transform", "translate(0,0)");
-
-      var chartC = d3
-        .select("#graph-view")
         .append("svg")
         .attr("width", widthChart)
         .attr("height", heightChart)
@@ -172,6 +216,46 @@
         .range([sliderMargin.left, widthChart - sliderMargin.right])
         .clamp(true);
 
+      chartA
+        .append("rect")
+        .attr("x", 10)
+        .attr("y", 50)
+        .attr("width", 55)
+        .attr("height", 30)
+        .attr("fill", "#54494b")
+        .style("cursor", "pointer")
+        .on("click", function() {
+          toggleMode();
+        });
+
+      var modeToggle = chartA
+        .append("rect")
+        .attr("x", 15)
+        .attr("y", 55)
+        .attr("width", 20)
+        .attr("height", 20)
+        .attr("fill", "white")
+        .style("cursor", "pointer")
+        .on("click", function() {
+          toggleMode();
+        });
+
+      chartA
+        .append("text")
+        .attr("class", "mode-toggle-text-0")
+        .text("mode:")
+        .attr("fill", "#54494b")
+        .attr("x", 75)
+        .attr("y", 60);
+
+      chartA
+        .append("text")
+        .attr("class", "mode-toggle-text-1")
+        .text("naive")
+        .attr("fill", "#54494b")
+        .attr("x", 75)
+        .attr("y", 75);
+
       var sliderNSVG = chartA
         .append("g")
         .attr("transform", "translate(" + 0 + "," + 30 + ")");
@@ -181,14 +265,14 @@
         .attr("class", "slider-labels")
         .attr("dy", "0.3em")
         .text("n: ")
-        .attr("x", 60);
+        .attr("x", 230);
 
       var nLabel = sliderNSVG
         .append("text")
         .attr("class", "slider-labels")
         .attr("dy", "0.3em")
         .text(currentN)
-        .attr("x", 80);
+        .attr("x", 245);
 
       var sliderN = sliderNSVG.append("g").attr("class", "slider");
 
@@ -241,14 +325,14 @@
         .attr("class", "slider-labels")
         .attr("dy", "0.3em")
         .text("m: ")
-        .attr("x", 60);
+        .attr("x", 230);
 
       var mLabel = sliderMSVG
         .append("text")
         .attr("class", "slider-labels")
         .attr("dy", "0.3em")
         .text(currentM)
-        .attr("x", 80);
+        .attr("x", 245);
 
       var sliderM = sliderMSVG.append("g").attr("class", "slider");
 
@@ -301,14 +385,14 @@
         .attr("class", "slider-labels")
         .attr("dy", "0.3em")
         .text("p: ")
-        .attr("x", 60);
+        .attr("x", 230);
 
       var pLabel = sliderPSVG
         .append("text")
         .attr("class", "slider-labels")
         .attr("dy", "0.3em")
         .text(currentP)
-        .attr("x", 80);
+        .attr("x", 245);
 
       var sliderP = sliderPSVG.append("g").attr("class", "slider");
 
@@ -353,11 +437,11 @@
         .attr("height", "20px");
 
       // setup matrix view boxes:
-      var boxWidth = 120;
-      var boxHeight = 340;
+      var boxWidth = 180;
+      var boxHeight = 320;
       var boxASVG = chartA
         .append("g")
-        .attr("transform", "translate(" + 10 + "," + 150 + ")");
+        .attr("transform", "translate(" + 10 + "," + 140 + ")");
 
       /* boxASVG
         .append("rect")
@@ -369,7 +453,7 @@
 
       var boxBSVG = chartA
         .append("g")
-        .attr("transform", "translate(" + (boxWidth + 25) + "," + 150 + ")");
+        .attr("transform", "translate(" + (boxWidth + 40) + "," + 140 + ")");
 
       /* boxBSVG
         .append("rect")
@@ -383,8 +467,24 @@
         .append("g")
         .attr(
           "transform",
-          "translate(" + (2 * boxWidth + 40) + "," + 150 + ")"
+          "translate(" + (2 * boxWidth + 70) + "," + 140 + ")"
         );
+
+      chartA
+        .append("image")
+        .attr("xlink:href", "assets/times-solid.svg")
+        .attr("width", 16)
+        .attr("height", 16)
+        .attr("x", boxWidth + 17)
+        .attr("y", 140 + boxHeight / 2);
+
+      chartA
+        .append("image")
+        .attr("xlink:href", "assets/equals-solid.svg")
+        .attr("width", 16)
+        .attr("height", 16)
+        .attr("x", 2 * boxWidth + 47)
+        .attr("y", 140 + boxHeight / 2);
 
       /* boxCSVG
         .append("rect")
@@ -397,14 +497,6 @@
       var dataA = getMatrix(currentM, currentN);
       var dataB = getMatrix(currentP, currentM);
       var dataC = getMatrix(currentP, currentN);
-
-      console.log(dataA);
-      console.log(dataB);
-      console.log(dataC);
-
-      //activateMatrix(currentM, currentN, dataA);
-      //activateMatrix(currentN, currentP, dataB);
-      //activateMatrix(currentM, currentP, dataC);
 
       xScaleM = d3
         .scaleBand()
@@ -514,13 +606,13 @@
         });
 
       // Memory View:
-      var memoryX = 20;
-      var memoryY = 5;
+      var memoryX = 100;
+      var memoryY = 1;
       var memoryA = getMatrix(memoryX, memoryY);
       var memoryB = getMatrix(memoryX, memoryY);
       var memoryC = getMatrix(memoryX, memoryY);
       var memoryWidth = widthChart - 20;
-      var memoryHeight = 100;
+      var memoryHeight = 10;
 
       var xScaleMemory = d3
         .scaleBand()
@@ -532,17 +624,17 @@
         .domain([...Array(memoryY).keys()])
         .range([0, memoryHeight]);
 
-      var memoryASVG = chartB
+      var memoryASVG = chartA
         .append("g")
-        .attr("transform", "translate(" + 10 + "," + 150 + ")");
+        .attr("transform", "translate(" + 10 + "," + 520 + ")");
 
-      var memoryBSVG = chartB
+      var memoryBSVG = chartA
         .append("g")
-        .attr("transform", "translate(" + 10 + "," + 267.5 + ")");
+        .attr("transform", "translate(" + 10 + "," + 560 + ")");
 
-      var memoryCSVG = chartB
+      var memoryCSVG = chartA
         .append("g")
-        .attr("transform", "translate(" + 10 + "," + 385 + ")");
+        .attr("transform", "translate(" + 10 + "," + 600 + ")");
 
       var memoryAchart = memoryASVG
         .selectAll(".memory-a-g")
@@ -632,6 +724,198 @@
         });
 
       // Graph View:
+      d3.csv("times.csv").then(function(data) {
+        graphData = data;
+        var chartB = d3
+          .select("#graph-view")
+          .append("svg")
+          .attr("width", widthChart)
+          .attr("height", heightChart)
+          .append("g")
+          .attr("transform", "translate(" + 0 + "," + 0 + ")");
+
+        var n = graphData.length;
+
+        console.log(graphData);
+
+        naive = [];
+        transpose = [];
+        tiled = [];
+        n_list = [];
+        graphData.forEach(function(v) {
+          naive.push(+v["naive"]);
+          transpose.push(+v["transpose"]);
+          tiled.push(+v["tiled"]);
+          n_list.push(+v["N"]);
+        });
+
+        var maxVal = d3.max([
+          naive.slice(-1),
+          transpose.slice(-1),
+          tiled.slice(-1)
+        ]);
+
+        xScale = d3
+          .scaleLinear()
+          .domain([0, n - 1]) // input
+          .range([graphMargin.left, widthChart - graphMargin.right]); // output
+
+        var yScale = d3
+          .scaleLinear()
+          .domain([0, maxVal]) // input
+          .range([heightChart - graphMargin.bottom, graphMargin.top]); // output
+
+        var line = d3
+          .line()
+          .x(function(d, i) {
+            return xScale(i);
+          })
+          .y(function(d) {
+            console.log("d", d);
+            console.log("yScale", yScale(d));
+            return yScale(d);
+          });
+
+        chartB
+          .append("g")
+          .attr("class", "x-axis")
+          .attr(
+            "transform",
+            "translate(0," + (heightChart - graphMargin.bottom) + ")"
+          )
+          .call(
+            d3.axisBottom(xScale).tickFormat(function(d, i) {
+              return n_list[i];
+            })
+          );
+
+        chartB
+          .append("text")
+          .attr("class", "axis-label")
+          .attr(
+            "transform",
+            "translate(" +
+              widthChart / 2 +
+              " ," +
+              (heightChart - graphMargin.bottom + 40) +
+              ")"
+          )
+          .text("N");
+
+        chartB
+          .append("g")
+          .attr("class", "y-axis")
+          .attr("transform", "translate(" + graphMargin.left + ",0)")
+          .call(d3.axisLeft(yScale));
+
+        chartB
+          .append("text")
+          .attr("class", "axis-label")
+          .attr("transform", "rotate(-90)")
+          .attr("y", graphMargin.left - 50)
+          .attr("x", 0 - heightChart / 2)
+          .attr("dy", "1em")
+          .text("Value");
+
+        chartB
+          .append("path")
+          .datum(naive)
+          .attr("class", "line line-naive")
+          .style("stroke", "#235789")
+          .attr("d", function(d, i) {
+            return line(d, i);
+          });
+
+        chartB
+          .append("path")
+          .datum(transpose)
+          .attr("class", "line line-transpose")
+          .style("stroke", "#F1D302")
+          .attr("d", function(d, i) {
+            return line(d, i);
+          });
+
+        chartB
+          .append("path")
+          .datum(tiled)
+          .attr("class", "line line-tiled")
+          .style("stroke", "#C1292E")
+          .attr("d", function(d, i) {
+            return line(d, i);
+          });
+
+        tipBox = chartB
+          .append("rect")
+          .attr("x", graphMargin.left)
+          .attr("y", graphMargin.top)
+          .attr("width", widthChart - graphMargin.right - graphMargin.left)
+          .attr("height", heightChart - graphMargin.top - graphMargin.bottom)
+          .attr("fill-opacity", 0)
+          .on("mousemove", drawTooltip)
+          .on("mouseout", hideTooltip)
+          .style("stroke", "black")
+          .style("stroke-width", 2);
+
+        tooltipLine = chartB.append("line");
+
+        legendText = ["naive", "transpose", "tiled"];
+
+        var legendRectSize = 18;
+        var legendSpacing = 18;
+
+        legend = chartB
+          .selectAll(".legend")
+          .data(legendText)
+          .enter()
+          .append("g")
+          .attr("class", "legend")
+          .attr("transform", function(d, i) {
+            var height = legendRectSize + legendSpacing;
+            var offset = 0;
+            var horz = graphMargin.left;
+            var vert = heightChart - 110 + i * height + offset;
+            return "translate(" + horz + "," + vert + ")";
+          })
+          .style("cursor", "pointer")
+          .on("click", function(d) {
+            updateGraph(d);
+          });
+
+        legend
+          .append("rect")
+          .attr("x", 0)
+          .attr("y", 0)
+          .attr("id", function(d) {
+            return "legend-rect-" + d;
+          })
+          .attr("width", legendRectSize)
+          .attr("height", legendRectSize)
+          .style("stroke", "black")
+          .style("stroke-width", 2)
+          .attr("fill", function(d, i) {
+            if (i === 0) {
+              return "#235789";
+            }
+            if (i === 1) {
+              return "#F1D302";
+            }
+            if (i === 2) {
+              return "#C1292E";
+            }
+          });
+
+        legend
+          .append("text")
+          .attr("class", "legend-label")
+          .attr("x", 25)
+          .attr("y", 13)
+          .attr("id", function(d) {
+            return "legend-label-" + d;
+          })
+          .text(function(d) {
+            return d;
+          });
+      });
 
       // Controls:
       var controlSVG = d3
@@ -686,6 +970,77 @@
         .attr("y", 50)
         .attr("x", 100);
 
+      function updateGraph(d) {
+        console.log(d3.select("#legend-rect-" + d).attr("opacity"));
+        if (d3.select("#legend-rect-" + d).attr("opacity") == 0.5) {
+          d3.select("#legend-rect-" + d).attr("opacity", 1);
+          d3.select("#legend-label-" + d).attr("opacity", 1);
+          d3.select(".line-" + d).attr("opacity", 1);
+          d3.select("." + d + "-info").style("display", "");
+        } else {
+          d3.select("#legend-rect-" + d).attr("opacity", 0.5);
+          d3.select("#legend-label-" + d).attr("opacity", 0.5);
+          d3.select(".line-" + d).attr("opacity", 0);
+          d3.select("." + d + "-info").style("display", "none");
+        }
+      }
+
+      function hideTooltip() {
+        d3.select(".tooltip").style("display", "none");
+        tooltipLine.style("display", "none");
+      }
+
+      function drawTooltip() {
+        let x = d3.event.clientX;
+        let y = d3.event.clientY;
+        let xInvert = Math.floor(xScale.invert(x) - 12);
+
+        d3.select(".tooltip").style(
+          "transform",
+          `translate(${x + 10}px,${y + 10}px)`
+        );
+
+        tooltipLine
+          .style("stroke", "grey")
+          .style("display", "")
+          .style("stroke-width", 2)
+          .style("stroke-dasharray", "3, 3")
+          .attr("x1", xScale(xInvert))
+          .attr("x2", xScale(xInvert))
+          .attr("y1", graphMargin.top)
+          .attr("y2", heightChart - graphMargin.bottom);
+
+        d3.select(".tooltip").style("display", "block");
+        d3.select(".tooltip-title").text("N: " + n_list[xInvert]);
+        d3.select(".naive-info").text(
+          "Naive: " + graphData[xInvert]["naive"] + " seconds"
+        );
+        d3.select(".transpose-info").text(
+          "Transpose: " + graphData[xInvert]["transpose"] + " seconds"
+        );
+        d3.select(".tiled-info").text(
+          "Tiled: " + graphData[xInvert]["tiled"] + " seconds"
+        );
+      }
+
+      function toggleMode() {
+        if (mode === "naive") {
+          mode = "transpose";
+          modeToggle.attr("x", 40);
+          updateBoxes();
+          updateBoxes();
+          reset();
+          d3.select(".mode-toggle-text-1").text("transpose");
+        } else {
+          mode = "naive";
+          modeToggle.attr("x", 15);
+          updateBoxes();
+          updateBoxes();
+          reset();
+          d3.select(".mode-toggle-text-1").text("naive");
+        }
+      }
+
       function reset() {
         boxASVG.selectAll(".matrix-node").attr("fill", "#bab9b9");
         boxBSVG.selectAll(".matrix-node").attr("fill", "#bab9b9");
@@ -696,86 +1051,192 @@
       }
 
       function step() {
+        // x is row
+        // y is column
+        // z is block element
+
         console.log("currentP", currentP);
         console.log("currentN", currentN);
+        console.log("currentM", currentM);
         var index = 0;
         loop0: for (let i = 0; i < currentN; i++) {
           loop1: for (let j = 0; j < currentP; j++) {
-            if (index === currentStep) {
-              var x = i;
-              var y = j;
-              break loop0;
+            loop2: for (let k = 0; k < currentM; k++) {
+              if (index === currentStep) {
+                var x = i;
+                var y = j;
+                var z = k;
+                break loop0;
+              }
+              index++;
             }
-            index++;
           }
         }
         console.log("x", x);
         console.log("y", y);
+        console.log("z", z);
 
-        y_next = currentStep;
-        if (y_next + 1 > currentP) {
-          y_next = currentP - 1;
+        if (mode === "naive") {
+          y_next = currentStep;
+          if (y_next + 1 > currentP) {
+            y_next = currentP - 1;
+          }
+
+          highlightMatrix("", x, dataA);
+          highlightMatrix(y, "", dataB);
+          highlightMatrix(y, x, dataC);
+          activateMatrix("", x, z, dataA);
+          activateMatrix(y, "", z, dataB);
+          activateMatrix(y, x, 0, dataC);
+          highlightMemory(x, "", memoryA, "row");
+          highlightMemory("", y, memoryB, "column");
+          highlightMemory(x, "", memoryC, "point");
+          activateMemory(x, "", z, memoryA, "row");
+          activateMemory("", y, z, memoryB, "column");
+          activateMemory(x, "", z, memoryC, "point");
+        } else {
+          // think wrong:
+          y_next = currentStep;
+          if (y_next + 1 > currentP) {
+            y_next = currentP - 1;
+          }
+          highlightMatrix("", x, dataA);
+          highlightMatrix("", y, dataB);
+          highlightMatrix(y, x, dataC);
+          activateMatrix("", x, z, dataA);
+          activateMatrix("", y, z, dataB);
+          activateMatrix(y, x, 0, dataC);
+          highlightMemory(x, "", memoryA, "row");
+          highlightMemory(y, "", memoryB, "row");
+          highlightMemory(x, "", memoryC, "point");
+          activateMemory(x, "", z, memoryA, "row");
+          activateMemory(y, "", z, memoryB, "row");
+          activateMemory(x, "", z, memoryC, "point");
         }
 
-        activateMatrix("", x, dataA);
-        activateMatrix(y, "", dataB);
-        activateMatrix(y, x, dataC);
-        activateMatrix("", "", memoryA, (x + 1) * currentM);
-        activateMatrix("", "", memoryB, (y_next + 1) * currentM);
-        activateMatrix("", "", memoryC, currentStep + 1);
         update_charts();
       }
 
       function update_charts() {
-        boxASVG.selectAll(".matrix-node").attr("fill", function(d) {
-          if (d.active === true) {
-            return "#235789";
-          } else {
-            return "#bab9b9";
-          }
-        });
-        boxBSVG.selectAll(".matrix-node").attr("fill", function(d) {
-          if (d.active === true) {
-            return "#F1D302";
-          } else {
-            return "#bab9b9";
-          }
-        });
-        boxCSVG.selectAll(".matrix-node").attr("fill", function(d) {
-          if (d.active === true) {
-            return "#C1292E";
-          } else {
-            return "#bab9b9";
-          }
-        });
-        memoryASVG.selectAll(".memory-node").attr("fill", function(d) {
-          if (d.active === true) {
-            return "#235789";
-          } else {
-            return "#bab9b9";
-          }
-        });
-        memoryBSVG.selectAll(".memory-node").attr("fill", function(d) {
-          if (d.active === true) {
-            return "#F1D302";
-          } else {
-            return "#bab9b9";
-          }
-        });
-        memoryCSVG.selectAll(".memory-node").attr("fill", function(d) {
-          if (d.active === true) {
-            return "#C1292E";
-          } else {
-            return "#bab9b9";
-          }
-        });
+        boxASVG
+          .selectAll(".matrix-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#235789";
+            } else {
+              return "#bab9b9";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 6;
+            } else {
+              return 2;
+            }
+          });
+        boxBSVG
+          .selectAll(".matrix-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#F1D302";
+            } else {
+              return "#bab9b9";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 6;
+            } else {
+              return 2;
+            }
+          });
+        boxCSVG
+          .selectAll(".matrix-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#C1292E";
+            } else {
+              return "#bab9b9";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 6;
+            } else {
+              return 2;
+            }
+          });
+        memoryASVG
+          .selectAll(".memory-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#235789";
+            } else {
+              return "#bab9b9";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 2;
+            } else {
+              return 0.5;
+            }
+          });
+        memoryBSVG
+          .selectAll(".memory-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#F1D302";
+            } else {
+              return "#bab9b9";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 2;
+            } else {
+              return 0.5;
+            }
+          });
+        memoryCSVG
+          .selectAll(".memory-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#C1292E";
+            } else {
+              return "#bab9b9";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 2;
+            } else {
+              return 0.5;
+            }
+          });
       }
 
       function updateBoxes() {
-        n = currentN * currentP;
+        n = currentN * currentP * currentM;
 
         dataA = getMatrix(currentM, currentN);
-        dataB = getMatrix(currentP, currentM);
+        if (mode === "naive") {
+          dataB = getMatrix(currentP, currentM);
+        } else {
+          dataB = getMatrix(currentM, currentP);
+        }
         dataC = getMatrix(currentP, currentN);
 
         xScaleM = d3
@@ -796,6 +1257,11 @@
         yScaleM = d3
           .scaleBand()
           .domain([...Array(currentM).keys()])
+          .range([0, boxHeight]);
+
+        yScaleP = d3
+          .scaleBand()
+          .domain([...Array(currentP).keys()])
           .range([0, boxHeight]);
 
         var gAUpdate = boxASVG.selectAll(".matrix-g").data(dataA);
@@ -856,9 +1322,16 @@
           return "translate(0," + yScaleN(d.key) + ")";
         });
         //
-        boxBSVG.selectAll(".matrix-g").attr("transform", function(d) {
-          return "translate(0," + yScaleM(d.key) + ")";
-        });
+        if (mode === "naive") {
+          boxBSVG.selectAll(".matrix-g").attr("transform", function(d) {
+            return "translate(0," + yScaleM(d.key) + ")";
+          });
+        } else {
+          boxBSVG.selectAll(".matrix-g").attr("transform", function(d) {
+            return "translate(0," + yScaleP(d.key) + ")";
+          });
+        }
+
         boxCSVG.selectAll(".matrix-g").attr("transform", function(d) {
           return "translate(0," + yScaleN(d.key) + ")";
         });
@@ -875,17 +1348,32 @@
             return xScaleM.bandwidth();
           });
         //
-        boxBSVG
-          .selectAll(".matrix-node")
-          .attr("x", function(d) {
-            return xScaleP(d.key);
-          })
-          .attr("height", function(d) {
-            return yScaleM.bandwidth();
-          })
-          .attr("width", function(d) {
-            return xScaleP.bandwidth();
-          });
+        if (mode === "naive") {
+          boxBSVG
+            .selectAll(".matrix-node")
+            .attr("x", function(d) {
+              return xScaleP(d.key);
+            })
+            .attr("height", function(d) {
+              return yScaleM.bandwidth();
+            })
+            .attr("width", function(d) {
+              return xScaleP.bandwidth();
+            });
+        } else {
+          boxBSVG
+            .selectAll(".matrix-node")
+            .attr("x", function(d) {
+              return xScaleM(d.key);
+            })
+            .attr("height", function(d) {
+              return yScaleP.bandwidth();
+            })
+            .attr("width", function(d) {
+              return xScaleM.bandwidth();
+            });
+        }
+
         boxCSVG
           .selectAll(".matrix-node")
           .attr("x", function(d) {
@@ -899,22 +1387,127 @@
           });
       }
 
-      function activateMatrix(x, y, matrix, next = 0) {
+      function activateMatrix(x, y, z, matrix) {
         /*
         Takes a matrix and activates nodes.
+        x is column, y is row, z is the index of the block in question
+        */
+        index = 0;
+        matrix.forEach(function(v, i) {
+          v.values.forEach(function(w, j) {
+            w.active = false;
+            if (
+              (j === x && i === y) ||
+              (j === x && y === "") ||
+              (i === y && x === "")
+            ) {
+              if (index === z) {
+                w.active = true;
+              }
+              index++;
+            }
+          });
+        });
+      }
+
+      function activateMemory(x, y, z, memory, type) {
+        if (type === "row") {
+          index = 0;
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.active = false;
+              if (j < (x + 1) * currentM && j >= x * currentM) {
+                if (index === z) {
+                  w.active = true;
+                }
+                index++;
+              }
+            });
+          });
+        }
+        if (type === "point") {
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.active = false;
+              if (j === Math.floor(currentStep / currentM)) {
+                w.active = true;
+              }
+            });
+          });
+        }
+        if (type === "column") {
+          indices = [];
+          for (let i = 0; i < currentM; i++) {
+            indices.push(i * currentP + y);
+          }
+          index = 0;
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.active = false;
+              if (indices.indexOf(j) >= 0) {
+                if (index === z) {
+                  w.active = true;
+                }
+                index++;
+              }
+            });
+          });
+        }
+      }
+
+      function highlightMemory(x, y, memory, type) {
+        if (type === "row") {
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.highlight = false;
+              if (j < (x + 1) * currentM && j >= x * currentM) {
+                w.highlight = true;
+              }
+            });
+          });
+        }
+        if (type === "point") {
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              if (j === Math.floor(currentStep / currentM)) {
+                w.highlight = true;
+              }
+            });
+          });
+        }
+        if (type === "column") {
+          indices = [];
+          for (let i = 0; i < currentM; i++) {
+            indices.push(i * currentP + y);
+          }
+          console.log(indices);
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.highlight = false;
+              if (indices.indexOf(j) >= 0) {
+                w.highlight = true;
+              }
+            });
+          });
+        }
+      }
+
+      function highlightMatrix(x, y, matrix, next = 0) {
+        /*
+        Takes a matrix and highlights nodes.
         Can be a x, y pair or a row or a column
         */
         if (next === 0) {
           matrix.forEach(function(v, i) {
             v.values.forEach(function(w, j) {
-              w.active = false;
+              w.highlight = false;
 
               if (
                 (j === x && i === y) ||
                 (j === x && y === "") ||
                 (i === y && x === "")
               ) {
-                w.active = true;
+                w.highlight = true;
               }
             });
           });
@@ -923,10 +1516,10 @@
           matrix.forEach(function(v, i) {
             v.values.forEach(function(w, j) {
               if (added < next) {
-                w.active = true;
+                w.highlight = true;
                 added += 1;
               } else {
-                w.active = false;
+                w.highlight = false;
               }
             });
           });
@@ -943,12 +1536,18 @@
         mArray.forEach(function(v) {
           var obj = { key: v, values: [] };
           nArray.forEach(function(w) {
-            obj.values.push({ key: w, active: false });
+            obj.values.push({ key: w, highlight: false, active: false });
           });
           result.push(obj);
         });
         return result;
       }
+
+      d3.selection.prototype.moveToFront = function() {
+        return this.each(function() {
+          this.parentNode.appendChild(this);
+        });
+      };
     </script>
   </body>
 </html>
